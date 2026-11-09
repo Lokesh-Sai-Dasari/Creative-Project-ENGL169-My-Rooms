@@ -14,9 +14,11 @@
   const canvas = $('c');
   const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
   const coarse = matchMedia('(pointer: coarse)').matches;
-  renderer.setPixelRatio(LITE ? 1 : Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2));
+  // performance: a capped pixel ratio that steps down by itself if frames run slow; shadows drawn only when something casting them moves
+  const PERF = { pr: LITE ? 1 : Math.min(window.devicePixelRatio || 1, coarse ? 1.25 : 1.5), frame: 0, slow: 0, fast: 0, shadowFrames: 4, dirtyUntil: 0, camMoved: true };
+  renderer.setPixelRatio(PERF.pr);
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
   if (THREE.RectAreaLightUniformsLib) THREE.RectAreaLightUniformsLib.init();
   const scene = new THREE.Scene(); scene.background = LIB.col('#14110e');
   const camera = new THREE.PerspectiveCamera(62, 1, 0.02, 60);
@@ -233,12 +235,12 @@
     let w, h, pos;
     if (glass) { glass.geometry.computeBoundingBox(); const s = glass.geometry.boundingBox.getSize(new THREE.Vector3()); w = s.x * glass.scale.x; h = s.y * glass.scale.y; pos = glass.position.clone(); glass.visible = false; }
     else { w = gi.w; h = gi.h; pos = new THREE.Vector3(gi.x, gi.y, gi.z); }
-    const px = LITE ? 256 : 640;
+    const px = LITE ? 256 : 512;
     const rf = new THREE.Reflector(new THREE.PlaneGeometry(w, h), { textureWidth: px, textureHeight: Math.round(px * h / w), color: 0xb9bcbc, clipBias: 0.003 });
     rf.position.copy(pos); rf.position.z += 0.001;
     if (glass) { rf.rotation.copy(glass.rotation); glass.parent.add(rf); } else mirror.add(rf);
     const before = rf.onBeforeRender;
-    rf.onBeforeRender = function (r, s, c) { if (s.overrideMaterial || rf.userData.busy) return; rf.userData.busy = true; before.call(this, r, s, c); rf.userData.busy = false; };
+    rf.onBeforeRender = function (r, s, c) { if (s.overrideMaterial || rf.userData.busy) return; if (rf.userData.f === PERF.frame || (!PERF.camMoved && !M.on && rf.userData.f != null && PERF.frame - rf.userData.f < 30)) return; rf.userData.f = PERF.frame; rf.userData.busy = true; before.call(this, r, s, c); rf.userData.busy = false; };
     R.reflectors.push(rf);
   }
 
@@ -1063,7 +1065,7 @@
     const crt = new THREE.WebGLCubeRenderTarget(256, { format: THREE.RGBAFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, encoding: THREE.sRGBEncoding });
     const cc = new THREE.CubeCamera(0.05, 20, crt); cc.position.set(0, 1.3, 0); scene.add(cc);
     scene.environment = neutralEnv; setEnv(R, 0.25);
-    cc.update(renderer, scene); scene.remove(cc);
+    renderer.shadowMap.needsUpdate = true; cc.update(renderer, scene); scene.remove(cc);
     try { R.env = pmrem.fromCubemap(crt.texture).texture; } catch (e) { R.env = neutralEnv; }
     R.reflectors.forEach(r => r.visible = true);
     setEnv(R, LV.env);
@@ -1076,7 +1078,7 @@
     if (cur) { scene.remove(cur.root); if (cur.music) SFX.jazz(false); if (cur.campfire) SFX.camp(false); }
     if (!ROOMS[key]) { ROOMS[key] = key === 'kitchen' ? buildKitchen() : key === 'pool' ? buildPool() : key === 'campfire' ? buildCampfire() : buildBedroom(); scene.add(ROOMS[key].root); if (ROOMS[key].outdoor) { ROOMS[key].env = neutralEnv; setEnv(ROOMS[key], 0.06); } else if (Q.has('noprobe')) { ROOMS[key].env = neutralEnv; setEnv(ROOMS[key], LV.env); } else captureRoom(ROOMS[key]); }
     else scene.add(ROOMS[key].root);
-    cur = ROOMS[key]; scene.environment = cur.env || neutralEnv; scene.background = LIB.col(cur.bg || '#14110e'); renderer.toneMappingExposure = LV.exp * (cur.outdoor ? 1.25 : 1);
+    cur = ROOMS[key]; PERF.shadowFrames = 4; PERF.dirtyUntil = performance.now() + 800; scene.environment = cur.env || neutralEnv; scene.background = LIB.col(cur.bg || '#14110e'); renderer.toneMappingExposure = LV.exp * (cur.outdoor ? 1.25 : 1);
     document.body.dataset.room = key;
     $('bAnim').hidden = !cur.channels; ageUI();
     if (!cur.channels && M.on) { M.on = false; SFX.silence(); }
@@ -1208,13 +1210,14 @@
     if (!cur || cur.key !== 'bedroom' || S.busy) return;
     agePatch(cur);
     if (AGE.dir > 0) AGE.dir = -1; else if (AGE.dir < 0) AGE.dir = 1; else AGE.dir = AGE.F >= 0.5 ? -1 : 1;
+    PERF.dirtyUntil = performance.now() + 1500;
     ageUI();
   }
   function ageTick(dt) {
     if (!cur || cur.key !== 'bedroom') { AGE.uni.value = 0; if (agePass) agePass.uniforms.amount.value = 0; return; }
     if (AGE.dir) {
       AGE.F += AGE.dir * dt / (AGE.dir > 0 ? AGE.FWD : AGE.BACK);
-      if (AGE.F >= 1) { AGE.F = 1; AGE.dir = 0; } else if (AGE.F <= 0) { AGE.F = 0; AGE.dir = 0; setTimeout(ageUI, 0); }
+      if (AGE.F >= 1) { AGE.F = 1; AGE.dir = 0; PERF.shadowFrames = 2; } else if (AGE.F <= 0) { AGE.F = 0; AGE.dir = 0; PERF.shadowFrames = 2; setTimeout(ageUI, 0); }
       ageUI();
     }
     const F = AGE.F, e = F * F * (3 - 2 * F);
@@ -1332,8 +1335,12 @@
     S.level = Math.max(-1, Math.min(2, S.level + d)); target(); updateUI();
   }
   function toggleHelp(v) { help.hidden = v != null ? !v : !help.hidden; }
-  function toggleMotion() { if (!cur.channels) return; SFX.unlock(); M.on = !M.on; if (!M.on) SFX.silence(); $('bAnim').classList.toggle('on', M.on); $('bAnim').setAttribute('aria-pressed', M.on); }
+  function toggleMotion() {
+    PERF.dirtyUntil = performance.now() + 4000; if (!cur.channels) return; SFX.unlock(); M.on = !M.on; if (!M.on) SFX.silence(); $('bAnim').classList.toggle('on', M.on); $('bAnim').setAttribute('aria-pressed', M.on); }
+  const poke = () => { PERF.dirtyUntil = performance.now() + 900; };
+  ['pointerdown', 'pointermove', 'wheel', 'touchstart'].forEach(ev => window.addEventListener(ev, poke, { passive: true }));
   window.addEventListener('keydown', e => {
+    poke();
     SFX.unlock();
     if (window.NOTE && NOTE.isOpen()) return;
     const k = e.key;
@@ -1365,26 +1372,45 @@
     const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     if (composer) { composer.setSize(w, h); if (dim) dim.uniforms.texel.value.set(1 / (w * renderer.getPixelRatio()), 1 / (h * renderer.getPixelRatio())); if (agePass) agePass.uniforms.texel.value.set(1 / (w * renderer.getPixelRatio()), 1 / (h * renderer.getPixelRatio())); if (fxaa) fxaa.uniforms.resolution.value.set(1 / (w * renderer.getPixelRatio()), 1 / (h * renderer.getPixelRatio())); }
   }
-  window.addEventListener('resize', resize);
+  window.addEventListener('resize', () => { resize(); PERF.dirtyUntil = performance.now() + 900; });
   function render() {
     const show = S.level >= 0 || curPos.y < H - 0.1;
     cur.hide.forEach(o => o.visible = show);
     if (composer) composer.render(); else renderer.render(scene, camera);
   }
   let last = performance.now();
+  PERF.lastLook = new THREE.Vector3();
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; S.t += dt;
     const k = 1 - Math.pow(0.0025, dt);
     curPos.lerp(S.pos, k); curLook.lerp(S.look, k); curFov += (S.fov - curFov) * k;
-    const sway = S.level >= 0 ? 1 : 0;
-    camera.position.set(curPos.x + Math.sin(S.t * 0.4) * 0.006 * sway, curPos.y + Math.sin(S.t * 0.9) * 0.004 * sway, curPos.z);
+    const moved = camera.position.distanceToSquared(curPos) > 1e-10 || Math.abs(camera.fov - curFov) > 0.01 || PERF.lastLook.distanceToSquared(curLook) > 1e-10;
+    PERF.camMoved = moved;
+    camera.position.copy(curPos); PERF.lastLook.copy(curLook);
     camera.lookAt(curLook); if (Math.abs(camera.fov - curFov) > 0.01) { camera.fov = curFov; camera.updateProjectionMatrix(); }
     runMotion(cur, dt);
     ageTick(dt);
     MEM.dim += (MEM.dimTo - MEM.dim) * (1 - Math.pow(0.02, dt)); if (dim) dim.uniforms.amount.value = MEM.dim;
     cur.tick.forEach(f => { try { f(S.t, dt); } catch (e) { /* ignore */ } });
+    // is there anything new to draw?
+    const book = window.NOTE && NOTE.isOpen() && !S.busy;
+    const live = PERF.camMoved || M.on || AGE.dir !== 0 || Math.abs(MEM.dim - MEM.dimTo) > 0.002 || now < PERF.dirtyUntil || PERF.shadowFrames > 0 || cur.outdoor || cur.alwaysLive;
+    PERF.tick = (PERF.tick || 0) + 1;
+    if (!live && PERF.tick % 20 !== 0) return;                      // a still scene: redraw only now and then
+    if (book && PERF.shadowFrames === 0 && PERF.tick % 8 !== 0) return; // hidden behind the notebook
+    PERF.frame++;
+    // shadows: after building a room, while things move, and now and then while the room fades
+    if (PERF.shadowFrames > 0) { renderer.shadowMap.needsUpdate = true; PERF.shadowFrames--; }
+    else if (M.on && PERF.frame % 2 === 0) renderer.shadowMap.needsUpdate = true;
+    else if (AGE.dir !== 0 && PERF.frame % 12 === 0) renderer.shadowMap.needsUpdate = true;
     render();
+    // adapt: if frames keep running long, drop the resolution a step (never below 1)
+    if (!book && PERF.pr > 1 && live) {
+      const ft = dt * 1000;
+      if (ft > 26) PERF.slow++; else PERF.slow = Math.max(0, PERF.slow - 1);
+      if (PERF.slow > 45) { PERF.pr = Math.max(1, Math.round((PERF.pr - 0.25) * 100) / 100); renderer.setPixelRatio(PERF.pr); resize(); PERF.slow = 0; }
+    }
   }
 
   // ---------- start ----------
@@ -1400,7 +1426,7 @@
     S.sel = 0; S.level = 0; target(); curPos.copy(S.pos); curLook.copy(cur.homeLook);
     updateUI();
     requestAnimationFrame(frame);
-    if (DBG) window.__dbg = { AGE, toggleTime, SFX, SFXbeat: () => SFX.beat(), S, M, ROOMS, cur: () => cur, scene, camera, renderer, goRoom, activate, setLevel: l => { S.level = l; target(); updateUI(); }, select: i => { S.sel = i; target(); updateUI(); }, jump, motion: on => { if (!!on !== M.on) toggleMotion(); }, setMotionTime: t => { M.t = t; } };
+    if (DBG) window.__dbg = { PERF, AGE, toggleTime, SFX, SFXbeat: () => SFX.beat(), S, M, ROOMS, cur: () => cur, scene, camera, renderer, goRoom, activate, setLevel: l => { S.level = l; target(); updateUI(); }, select: i => { S.sel = i; target(); updateUI(); }, jump, motion: on => { if (!!on !== M.on) toggleMotion(); }, setMotionTime: t => { M.t = t; } };
     if (L) {
       window.__gate = true;
       await gateP;
