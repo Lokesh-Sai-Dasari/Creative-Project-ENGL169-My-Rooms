@@ -1371,8 +1371,7 @@
     cur.hide.forEach(o => o.visible = show);
     if (composer) composer.render(); else renderer.render(scene, camera);
   }
-  let last = performance.now(), hiddenTick = 0;
-  function bookFading() { const b = document.getElementById('book'); return !b || b.getAnimations().length > 0; }
+  let last = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; S.t += dt;
@@ -1385,8 +1384,6 @@
     ageTick(dt);
     MEM.dim += (MEM.dimTo - MEM.dim) * (1 - Math.pow(0.02, dt)); if (dim) dim.uniforms.amount.value = MEM.dim;
     cur.tick.forEach(f => { try { f(S.t, dt); } catch (e) { /* ignore */ } });
-    hiddenTick = (hiddenTick + 1) % 10;
-    if (window.NOTE && NOTE.isOpen() && document.getElementById('book').style.opacity !== '0' && !bookFading() && hiddenTick !== 0) return; // hidden behind the notebook page
     render();
   }
 
