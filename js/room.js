@@ -12,7 +12,15 @@
 
   // ---------- renderer, scene, camera ----------
   const canvas = $('c');
-  const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' }); }
+  catch (e) {
+    // the browser could not start 3D graphics: say so plainly instead of showing a black screen
+    const box = $('nogl'); if (box) box.hidden = false;
+    ['help', 'book'].forEach(id => { const el = $(id); if (el) el.hidden = true; });
+    document.querySelectorAll('.top, .bar').forEach(el => { el.style.display = 'none'; });
+    return;
+  }
   const coarse = matchMedia('(pointer: coarse)').matches;
   renderer.setPixelRatio(LITE ? 1 : Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2));
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
