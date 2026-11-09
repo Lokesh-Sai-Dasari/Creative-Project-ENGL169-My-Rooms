@@ -2,7 +2,7 @@
    Keyed by room, then by the thing's name exactly as it shows in the panel.
    lines: plain strings, or { text, mono: true } for a sound-word (shown in typewriter type).
    sounds: their own steady loop, separate from the words — pattern [[sound, seconds from the start of the loop], ...]
-   repeated every `cycle` seconds. Sounds: creak, spin, snore, snore1, yawn, chord, pool, break, clack, fridge, cutlery, rumble, sip, fold, flap, iron, game, mash, scribble, flip, riffle, sigh, doorOpen, knock, doorShut, rain, gust, bird. */
+   repeated every `cycle` seconds. Sounds: creak, spin, snore, snore1, yawn, chord, pool, break, clack, fridge, cutlery, rumble, sip, fold, flap, iron, game, mash, scribble, flip, riffle, sigh, doorOpen, knock, doorShut, rain, gust, bird, keys, drops, night. */
 window.MEMORIES = {
   bedroom: {
     "the desk, and everything on it": {
@@ -21,10 +21,10 @@ window.MEMORIES = {
       sounds: {
         pattern: [
           ["scribble", 0.6],
-          ["mash", 4.4],
-          ["flip", 7.2]
+          ["keys", 3.8],
+          ["flip", 9.2]
         ],
-        cycle: 11
+        cycle: 12
       }
     },
     "the mirror": {
@@ -68,11 +68,12 @@ window.MEMORIES = {
       ],
       sounds: {
         pattern: [
-          ["creak", 2.5],
-          ["spin", 4.1],
-          ["snore", 12.1]
+          ["creak", 1.2],
+          ["spin", 4.4],
+          ["creak", 7.6],
+          ["snore", 10.6]
         ],
-        cycle: 15.4
+        cycle: 16.4
       }
     },
     "the guitar": {
@@ -169,11 +170,11 @@ window.MEMORIES = {
         pattern: [
           ["rumble", 0.4],
           ["fridge", 3.2],
-          ["cutlery", 6.4],
-          ["sip", 8.6],
-          ["cutlery", 12.6]
+          ["cutlery", 7.4],
+          ["sip", 9.4],
+          ["cutlery", 15.6]
         ],
-        cycle: 16
+        cycle: 18
       }
     },
     "the shelf of clothes": {
@@ -239,12 +240,11 @@ window.MEMORIES = {
       ],
       sounds: {
         pattern: [
-          ["snore1", 0.8],
-          ["snore1", 3.6],
-          ["snore1", 6.4],
-          ["yawn", 10]
+          ["snore", 0.8],
+          ["snore", 6.2],
+          ["yawn", 12]
         ],
-        cycle: 14.5
+        cycle: 15.5
       }
     },
     "the controller": {
@@ -312,13 +312,12 @@ window.MEMORIES = {
         pattern: [
           ["scribble", 0.4],
           ["flip", 3],
-          ["scribble", 4],
-          ["sigh", 6.8],
-          ["riffle", 9],
-          ["scribble", 10.6],
-          ["sigh", 13.4]
+          ["scribble", 5],
+          ["sigh", 7.8],
+          ["riffle", 10.8],
+          ["sigh", 15.6]
         ],
-        cycle: 16
+        cycle: 18.5
       }
     },
     "the door": {
@@ -350,8 +349,8 @@ window.MEMORIES = {
       sounds: {
         pattern: [
           ["knock", 0.4],
-          ["doorOpen", 3.2],
-          ["doorShut", 8.5]
+          ["doorOpen", 3.4],
+          ["doorShut", 8.6]
         ],
         cycle: 13
       }
@@ -382,12 +381,10 @@ window.MEMORIES = {
       sounds: {
         pattern: [
           ["rain", 0.3],
-          ["gust", 5],
-          ["bird", 8.6],
-          ["bird", 9.8],
-          ["rain", 11]
+          ["gust", 6.6],
+          ["bird", 11.6]
         ],
-        cycle: 15.5
+        cycle: 17
       }
     }
   },
@@ -417,11 +414,11 @@ window.MEMORIES = {
         pattern: [
           ["rumble", 0.4],
           ["fridge", 3.2],
-          ["cutlery", 6.4],
-          ["sip", 8.6],
-          ["cutlery", 12.6]
+          ["cutlery", 7.4],
+          ["sip", 9.4],
+          ["cutlery", 15.6]
         ],
-        cycle: 16
+        cycle: 18
       }
     },
     "my mom, cutting vegetables": {
@@ -474,9 +471,9 @@ window.MEMORIES = {
       sounds: {
         pattern: [
           ["gas", 0.3],
-          ["flame", 2],
+          ["flame", 1.4],
           ["gas", 5.6],
-          ["flame", 7.6]
+          ["flame", 6.6]
         ],
         cycle: 11
       }
@@ -533,12 +530,11 @@ window.MEMORIES = {
       sounds: {
         pattern: [
           ["tap", 0.4],
-          ["dishes", 4.2],
-          ["bubbles", 6],
-          ["tap", 8],
-          ["dishes", 11.6]
+          ["dishes", 4.8],
+          ["bubbles", 6.6],
+          ["dishes", 11]
         ],
-        cycle: 14
+        cycle: 13.5
       }
     },
     "the chimney hood": {
@@ -562,10 +558,10 @@ window.MEMORIES = {
         pattern: [
           ["hood", 0.4],
           ["sizzle", 4.8],
-          ["cough", 6.6],
-          ["hood", 8.4]
+          ["cough", 7],
+          ["hood", 9.4]
         ],
-        cycle: 13
+        cycle: 14.5
       }
     }
   },
@@ -674,10 +670,9 @@ window.MEMORIES = {
       ],
       sounds: {
         pattern: [
-          ["gust", 0.4],
-          ["gust", 5.6]
+          ["gust", 0.4]
         ],
-        cycle: 10.5
+        cycle: 6.6
       }
     },
     "the night sky": {
@@ -693,9 +688,9 @@ window.MEMORIES = {
       ],
       sounds: {
         pattern: [
-          ["buzz", 1]
+          ["night", 0.5]
         ],
-        cycle: 9
+        cycle: 9.6
       }
     },
     "the fireflies": {
@@ -788,11 +783,9 @@ window.MEMORIES = {
       ],
       sounds: {
         pattern: [
-          ["fire", 0.2],
-          ["fire", 3.6],
-          ["fire", 7]
+          ["fire", 0.2]
         ],
-        cycle: 10.4
+        cycle: 11.3
       }
     },
     "marshmallows on sticks": {

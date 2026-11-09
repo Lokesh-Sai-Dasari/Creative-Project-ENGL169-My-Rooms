@@ -579,6 +579,12 @@
       const n = Math.random() < 0.25 ? 2 + (Math.random() * 4 | 0) : 1;
       for (let k = 0; k < n; k++) { const t = t0 + k * (0.01 + Math.random() * 0.05); const s2 = ac.createBufferSource(); s2.buffer = noise; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800 + Math.random() * 3500; f.Q.value = 1.5 + Math.random() * 3; const g = ac.createGain(); const a = 0.05 + Math.random() * 0.12; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(a, t + 0.001); g.gain.exponentialRampToValueAtTime(0.0003, t + 0.012 + Math.random() * 0.05); s2.connect(f); f.connect(g); g.connect(master); s2.start(t, Math.random()); s2.stop(t + 0.1); }
     }
+    function fireLoop() {
+      if (G.fire) return G.fire;
+      const g = ac.createGain(); g.gain.value = 0; g.connect(master); G.fire = g;
+      loadVoice(smpUrl('fire')).then(buf => { const s = ac.createBufferSource(); s.buffer = buf; s.loop = true; s.loopStart = 0.8; s.loopEnd = Math.max(2, buf.duration - 1.1); s.connect(g); s.start(0, 0.8); }).catch(() => {});
+      return g;
+    }
     function fireBed() {
       if (G.fire) return G.fire;
       const s2 = src(), f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380; const g = ac.createGain(); g.gain.value = 0;
@@ -594,7 +600,6 @@
         strum(CH[b], CH[b].top[k], t0, k === 0 ? 0.17 : 0.13);
         G.step++; const nb = Math.floor(G.step / 4), nk = G.step % 4; G.next = nb * bar + RHY[nk] * beat + G.start;
       }
-      while (G.nextPop < ac.currentTime + 0.2) { crackle(G.nextPop); G.nextPop += 0.06 + Math.random() * Math.random() * 0.7; }
     }
 
 
@@ -602,8 +607,27 @@
     const voiceCache = {};
     function loadVoice(url) { if (!voiceCache[url]) voiceCache[url] = fetch(url).then(r => r.arrayBuffer()).then(a => new Promise((res, rej) => ac.decodeAudioData(a, res, rej))); return voiceCache[url]; }
     // ---- memory sounds: little foley for the onomatopoeia that fall down the screen
-    let memBus = null;
-    function bus() { if (!memBus) { memBus = ac.createGain(); memBus.gain.value = 1; memBus.connect(master); } return memBus; }
+    let memBus = null, synBus = null;
+    function raw() { if (!memBus) { memBus = ac.createGain(); memBus.gain.value = 1; memBus.connect(master); } return memBus; }
+    // the synthesized foley is lifted to sit beside my voice, with a limiter so nothing jumps out
+    function bus() {
+      if (synBus && memBus) return synBus;
+      const out = raw(), g = ac.createGain(); g.gain.value = 2.3; const c = ac.createDynamicsCompressor(); c.threshold.value = -9; c.knee.value = 6; c.ratio.value = 12; c.attack.value = 0.003; c.release.value = 0.18;
+      g.connect(c); c.connect(out); synBus = g; return g;
+    }
+    // ---- recorded sounds (assets/sfx): decoded once, played on the memory bus
+    const SMP = ['fire', 'crickets', 'owl', 'birds', 'wind', 'rain', 'keyboard', 'paper', 'riffle', 'fan', 'bubbles', 'drops', 'laugh', 'snore', 'cough', 'knock', 'creak', 'creakdoor', 'can', 'sip', 'pour', 'sigh'];
+    const smpUrl = n => 'assets/sfx/' + n + '.mp3';
+    function smp(name, t0, o) {
+      o = o || {}; const out = raw();
+      loadVoice(smpUrl(name)).then(buf => {
+        if (memBus !== out) return;
+        const s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = o.rate || 1; const g = ac.createGain(), k = (o.gain == null ? 1 : o.gain) * 0.85;
+        const t = Math.max(t0, ac.currentTime + 0.01), off = o.offset || 0, d = Math.min(o.dur || 1e9, (buf.duration - off) / (o.rate || 1));
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(k, t + (o.fin || 0.02)); g.gain.setValueAtTime(k, t + Math.max(0.03, d - (o.fout || 0.08))); g.gain.linearRampToValueAtTime(0.0001, t + d);
+        s.connect(g); g.connect(out); s.start(t, off); s.stop(t + d + 0.05);
+      }).catch(() => {});
+    }
     function walk(n, base, amp, seed) { const a = new Float32Array(n); let v = 0; for (let i = 0; i < n; i++) { v += (Math.random() - 0.5) * amp; v *= 0.92; a[i] = Math.max(8, base[i] + v); } return a; }
     function creak(t0, pitch) {
       // a stick-slip creak: a buzzy low pulse, wandering in pitch, rung through the resonances of a plastic-and-metal chair
@@ -759,7 +783,7 @@
     function gtrOut() {
       const b = bus(); if (b.gtr) return b.gtr;
       const body = ac.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 220; body.Q.value = 1.2; body.gain.value = 5;
-      const top = ac.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 4200; const g = ac.createGain(); g.gain.value = 0.55;
+      const top = ac.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 4200; const g = ac.createGain(); g.gain.value = 0.4;
       body.connect(top); top.connect(g); g.connect(b); b.gtr = body; return body;
     }
     function chord(t0) {
@@ -935,24 +959,24 @@
       camp(on, strumCb) {
         if (!this.enabled || !ac) return;
         if (strumCb) G.strumCb = strumCb;
-        if (on && !G.on) { G.on = true; const o = gOut(); o.gain.gain.cancelScheduledValues(ac.currentTime); o.gain.gain.setTargetAtTime(0.9, ac.currentTime, 0.2); fireBed().gain.setTargetAtTime(0.09, ac.currentTime, 0.6); G.start = ac.currentTime + 0.15; G.next = G.start; G.step = 0; G.nextPop = ac.currentTime + 0.05; G.timer = setInterval(campSchedule, 25); }
+        if (on && !G.on) { G.on = true; const o = gOut(); o.gain.gain.cancelScheduledValues(ac.currentTime); o.gain.gain.setTargetAtTime(0.9, ac.currentTime, 0.2); fireLoop().gain.setTargetAtTime(0.75, ac.currentTime, 0.6); G.start = ac.currentTime + 0.15; G.next = G.start; G.step = 0; G.nextPop = ac.currentTime + 0.05; G.timer = setInterval(campSchedule, 25); }
         else if (!on && G.on) { G.on = false; clearInterval(G.timer); G.timer = null; G.out.gain.gain.setTargetAtTime(0, ac.currentTime, 0.35); if (G.fire) G.fire.gain.setTargetAtTime(0, ac.currentTime, 0.4); }
       },
       memory(kind) {
         if (!this.enabled || !ac) return; const t0 = ac.currentTime + 0.05;
-        if (kind === 'creak') { creak(t0, 46); creak(t0 + 0.62, 54); }
+        if (kind === 'creak') smp('creak', t0);
         else if (kind === 'spin') spin(t0);
-        else if (kind === 'snore') { snore(t0); snore(t0 + 3.0); }
-        else if (kind === 'snore1') snore(t0);
-        else if (kind === 'yawn') yawn(t0);
+        else if (kind === 'snore') smp('snore', t0);
+        else if (kind === 'snore1') smp('snore', t0);
+        else if (kind === 'yawn') smp('sigh', t0, { rate: 0.74, gain: 1.1, fin: 0.25 });
         else if (kind === 'chord') chord(t0);
         else if (kind === 'pool') poolShot(t0);
         else if (kind === 'clack') { clack(t0, 1); clack(t0 + 0.4, 0.6); }
         else if (kind === 'break') poolBreak(t0);
-        else if (kind === 'fridge') fridgeOpen(t0);
+        else if (kind === 'fridge') { swish(t0, 0.18, 350, 0.12, 0.7); knock(t0, 70, 0.12, 0.1); smp('creakdoor', t0 + 0.15); hit(t0 + 3.5, [[2200, 0.3, 1], [3400, 0.2, 0.7]], 0.08, 0.04); }
         else if (kind === 'cutlery') cutlery(t0);
         else if (kind === 'rumble') rumble(t0);
-        else if (kind === 'sip') sipAah(t0);
+        else if (kind === 'sip') { smp('can', t0); smp('sip', t0 + 1.5); smp('sigh', t0 + 3.3, { rate: 1.05, gain: 0.9 }); }
         else if (kind === 'fold') fold(t0);
         else if (kind === 'flap') flap(t0);
         else if (kind === 'iron') iron(t0);
@@ -960,36 +984,39 @@
         else if (kind === 'buzz') flyBuzz(t0);
         else if (kind === 'practice') practice(t0);
         else if (kind === 'heart') heartbeat(t0);
-        else if (kind === 'fire') campCrackle(t0);
+        else if (kind === 'fire') smp('fire', t0, { gain: 1.6, fin: 0.6, fout: 0.9 });
         else if (kind === 'squish') squish(t0);
         else if (kind === 'chop') chop(t0, 6);
-        else if (kind === 'sighF') sighF(t0);
+        else if (kind === 'sighF') smp('sigh', t0, { rate: 1.2, gain: 0.9 });
         else if (kind === 'gas') gasHiss(t0);
-        else if (kind === 'flame') flameCrackle(t0);
+        else if (kind === 'flame') smp('fire', t0, { offset: 1 + Math.random() * 6, dur: 3.4, gain: 1.0, fin: 0.4, fout: 0.8 });
         else if (kind === 'boom') boom(t0);
-        else if (kind === 'laugh') hugLaugh(t0);
+        else if (kind === 'laugh') { smp('laugh', t0); smp('laugh', t0 + 0.35, { rate: 0.86, gain: 0.7 }); [1.5, 1.85, 2.2, 2.55].forEach((t, i) => backSlap(t0 + t + (i % 2) * 0.03)); }
         else if (kind === 'roll') tableRoll(t0);
         else if (kind === 'hum') ledHum(t0);
         else if (kind === 'freezer') freezerOpen(t0);
         else if (kind === 'brrr') brrr(t0);
         else if (kind === 'chatter') chatter(t0);
-        else if (kind === 'tap') tap(t0);
+        else if (kind === 'tap') smp('pour', t0);
         else if (kind === 'dishes') dishes(t0);
-        else if (kind === 'bubbles') bubbles(t0);
-        else if (kind === 'hood') hoodFan(t0);
+        else if (kind === 'bubbles') smp('bubbles', t0);
+        else if (kind === 'hood') { knock(t0, 300, 0.03, 0.08); hit(t0, [[2400, 0.4, 1]], 0.03, 0.05); smp('fan', t0 + 0.1, { dur: 4.2, fin: 0.8, fout: 0.8, gain: 1.15 }); }
         else if (kind === 'sizzle') sizzle(t0);
-        else if (kind === 'cough') cough(t0);
+        else if (kind === 'cough') smp('cough', t0);
         else if (kind === 'mash') mash(t0);
         else if (kind === 'scribble') scribble(t0);
-        else if (kind === 'flip') pageFlip(t0);
-        else if (kind === 'riffle') riffle(t0);
-        else if (kind === 'sigh') sigh(t0);
-        else if (kind === 'doorOpen') doorOpen(t0);
-        else if (kind === 'knock') doorKnock(t0);
+        else if (kind === 'flip') smp('paper', t0);
+        else if (kind === 'riffle') smp('riffle', t0);
+        else if (kind === 'sigh') smp('sigh', t0, { rate: 0.92 });
+        else if (kind === 'doorOpen') { hit(t0, [[1500, 0.5, 1], [2600, 0.3, 0.6]], 0.05, 0.08); knock(t0, 220, 0.04, 0.06); smp('creakdoor', t0 + 0.12); }
+        else if (kind === 'knock') smp('knock', t0);
         else if (kind === 'doorShut') doorShut(t0);
-        else if (kind === 'rain') rain(t0);
-        else if (kind === 'gust') gust(t0);
-        else if (kind === 'bird') bird(t0);
+        else if (kind === 'rain') smp('rain', t0);
+        else if (kind === 'gust') smp('wind', t0);
+        else if (kind === 'bird') smp('birds', t0);
+        else if (kind === 'keys') smp('keyboard', t0);
+        else if (kind === 'drops') smp('drops', t0);
+        else if (kind === 'night') { smp('crickets', t0, { fin: 0.8, fout: 1 }); smp('owl', t0 + 3.6, { gain: 0.8 }); }
       },
       pencil(delay, dur, kind) { if (!this.enabled || !ac) return; pencilStroke(ac.currentTime + 0.03 + delay, dur, kind); },
       tap() { const an = ac.createAnalyser(); an.fftSize = 2048; master.connect(an); return an; },
@@ -997,11 +1024,12 @@
         if (!this.enabled || !ac) { if (onend) onend(); return; }
         loadVoice(url).then(buf => {
           const src = ac.createBufferSource(); src.buffer = buf; const g = ac.createGain(); g.gain.value = 0.8;
-          src.connect(g); g.connect(bus()); src.onended = () => { if (onend) onend(); }; src.start();
+          src.connect(g); g.connect(raw()); src.onended = () => { if (onend) onend(); }; src.start();
         }).catch(() => { if (onend) onend(); });
       },
       preloadVoice(url) { if (ac) loadVoice(url).catch(() => {}); },
-      memoryStop() { if (!ac || !memBus) return; const b = memBus; memBus = null; b.gain.setTargetAtTime(0, ac.currentTime, 0.15); setTimeout(() => { try { b.disconnect(); } catch (e) { /* gone */ } }, 1500); },
+      preloadSfx() { if (ac) SMP.forEach(n => loadVoice(smpUrl(n)).catch(() => {})); },
+      memoryStop() { if (!ac || !memBus) return; const b = memBus; memBus = null; synBus = null; b.gain.setTargetAtTime(0, ac.currentTime, 0.15); setTimeout(() => { try { b.disconnect(); } catch (e) { /* gone */ } }, 1500); },
       jazz(on) {
         if (!this.enabled || !ac) return;
         if (on && !J.on) { J.on = true; const o = jOut(); o.gain.gain.cancelScheduledValues(ac.currentTime); o.gain.gain.setTargetAtTime(0.55, ac.currentTime, 0.4); J.next = ac.currentTime + 0.08; J.step = 0; J.timer = setInterval(schedule, 25); }
@@ -1009,7 +1037,7 @@
       },
       beat() { if (!ac || !J.on) return 0; return Math.exp(-Math.max(0, ac.currentTime - J.lastBass) * 9); },
       enabled: false,
-      unlock() { if (!init()) return; if (ac.state === 'suspended') ac.resume(); this.enabled = true; },
+      unlock() { if (!init()) return; if (ac.state === 'suspended') ac.resume(); this.enabled = true; if (!this._pre) { this._pre = true; this.preloadSfx(); } },
       start(kind) {
         if (!this.enabled || !ac) return;
         if (kind === 'drawer') { burst(900 + Math.random() * 400, 0.8, 0.45, 0.05); thump(90, 0.12, 0.08, 0.38); }
