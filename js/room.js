@@ -991,7 +991,7 @@
         else if (kind === 'gas') gasHiss(t0);
         else if (kind === 'flame') smp('fire', t0, { offset: 1 + Math.random() * 6, dur: 3.4, gain: 1.0, fin: 0.4, fout: 0.8 });
         else if (kind === 'boom') boom(t0);
-        else if (kind === 'laugh') { smp('laugh', t0); smp('laugh', t0 + 0.35, { rate: 0.86, gain: 0.7 }); [1.5, 1.85, 2.2, 2.55].forEach((t, i) => backSlap(t0 + t + (i % 2) * 0.03)); }
+        else if (kind === 'laugh') { [1.5, 1.85, 2.2, 2.55].forEach((t, i) => backSlap(t0 + t + (i % 2) * 0.03)); }
         else if (kind === 'roll') tableRoll(t0);
         else if (kind === 'hum') ledHum(t0);
         else if (kind === 'freezer') freezerOpen(t0);
